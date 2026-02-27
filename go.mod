@@ -1,4 +1,4 @@
-module github.com/retro/vas
+module github.com/ShtrlX00/Selectel-Career-Wave
 
 go 1.24.0
 
