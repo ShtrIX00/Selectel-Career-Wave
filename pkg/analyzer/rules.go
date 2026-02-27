@@ -131,41 +131,110 @@ func isEmoji(r rune) bool {
 	return false
 }
 
-// checkSensitiveText checks if the literal message itself contains sensitive keywords.
+// checkSensitiveText checks if the literal message itself contains sensitive keywords as whole words.
 func checkSensitiveText(msg string, keywords map[string]bool) *Finding {
-	lower := strings.ToLower(msg)
-	for kw := range keywords {
-		if kw == "" {
+	if len(keywords) == 0 || msg == "" {
+		return nil
+	}
+
+	// Split into "words" by any non-letter/digit.
+	words := strings.FieldsFunc(strings.ToLower(msg), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+
+	for _, w := range words {
+		if w == "" {
 			continue
 		}
-		if strings.Contains(lower, kw) {
+		if keywords[w] {
 			return &Finding{
 				Rule:    "no-sensitive-data",
-				Message: fmt.Sprintf("log message may contain sensitive data: message contains keyword %q", kw),
+				Message: fmt.Sprintf("log message may contain sensitive data: message contains keyword %q", w),
 			}
 		}
 	}
+
 	return nil
 }
 
-// checkSensitiveData checks if any of the given identifier parts match sensitive keywords.
 func checkSensitiveData(parts []string, keywords map[string]bool) *Finding {
 	for _, part := range parts {
-		lower := strings.ToLower(part)
-		if keywords[lower] {
+		if part == "" {
+			continue
+		}
+
+		// 1) whole identifier match
+		lowerWhole := strings.ToLower(part)
+		if keywords[lowerWhole] {
 			return &Finding{
 				Rule:    "no-sensitive-data",
-				Message: fmt.Sprintf("log message may contain sensitive data: identifier %q matches keyword %q", part, lower),
+				Message: fmt.Sprintf("log message may contain sensitive data: identifier %q matches keyword %q", part, lowerWhole),
 			}
 		}
-		for kw := range keywords {
-			if len(kw) >= 4 && strings.Contains(lower, kw) {
+
+		// 2) split identifier into tokens and match tokens
+		for _, tok := range splitIdentifierParts(part) {
+			if keywords[tok] {
 				return &Finding{
 					Rule:    "no-sensitive-data",
-					Message: fmt.Sprintf("log message may contain sensitive data: identifier %q contains keyword %q", part, kw),
+					Message: fmt.Sprintf("log message may contain sensitive data: identifier %q matches keyword %q", part, tok),
 				}
 			}
 		}
+
+		// 3) joined form (access_token -> accesstoken, apiKey -> apikey)
+		joined := strings.ReplaceAll(strings.NewReplacer("_", "", "-", "", ".", "", " ", "").Replace(lowerWhole), " ", "")
+		if joined != "" && keywords[joined] {
+			return &Finding{
+				Rule:    "no-sensitive-data",
+				Message: fmt.Sprintf("log message may contain sensitive data: identifier %q matches keyword %q", part, joined),
+			}
+		}
 	}
+
 	return nil
+}
+
+func splitIdentifierParts(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	// Normalize separators to spaces first.
+	repl := strings.NewReplacer("_", " ", "-", " ", ".", " ")
+	s = repl.Replace(s)
+
+	var out []string
+	for _, chunk := range strings.Fields(s) {
+		// Split camelCase inside each chunk.
+		var cur []rune
+		runes := []rune(chunk)
+
+		flush := func() {
+			if len(cur) == 0 {
+				return
+			}
+			out = append(out, strings.ToLower(string(cur)))
+			cur = cur[:0]
+		}
+
+		for i, r := range runes {
+			// Word boundary: lower->upper (aB), digit<->letter boundary, or Upper followed by lower (ABCd split at C|d)
+			if i > 0 {
+				prev := runes[i-1]
+				nextLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+
+				if (unicode.IsLower(prev) && unicode.IsUpper(r)) ||
+					(unicode.IsLetter(prev) && unicode.IsDigit(r)) ||
+					(unicode.IsDigit(prev) && unicode.IsLetter(r)) ||
+					(unicode.IsUpper(prev) && unicode.IsUpper(r) && nextLower) {
+					flush()
+				}
+			}
+			cur = append(cur, r)
+		}
+		flush()
+	}
+
+	return out
 }

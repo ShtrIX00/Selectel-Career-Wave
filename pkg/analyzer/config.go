@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,19 +30,65 @@ func DefaultConfig() *Config {
 	return c
 }
 
+// buildSensitiveKeywordsSet normalizes and expands keywords for matching.
+// Examples:
+// - "api_key" -> "api_key", "api key", "api", "key", "apikey"
+// - "access-token" -> "access-token", "access token", "access", "token", "accesstoken"
+func buildSensitiveKeywordsSet(raw []string) map[string]bool {
+	out := make(map[string]bool)
+
+	add := func(s string) {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if s != "" {
+			out[s] = true
+		}
+	}
+
+	repl := strings.NewReplacer("_", " ", "-", " ")
+
+	for _, kw := range raw {
+		kw = strings.TrimSpace(kw)
+		if kw == "" {
+			continue
+		}
+
+		// Original (lowercased later in add)
+		add(kw)
+
+		// Normalized separators to spaces
+		kw2 := repl.Replace(kw)
+		add(kw2)
+
+		// Tokens (api_key -> api, key)
+		for _, t := range strings.Fields(kw2) {
+			add(t)
+		}
+
+		// Joined form (api key -> apikey)
+		add(strings.ReplaceAll(kw2, " ", ""))
+	}
+
+	return out
+}
+
 func (c *Config) init() {
+	// disabled rules: normalize to lower-case + trim
 	c.disabledRulesSet = make(map[string]bool, len(c.DisabledRules))
 	for _, r := range c.DisabledRules {
+		r = strings.ToLower(strings.TrimSpace(r))
+		if r == "" {
+			continue
+		}
 		c.disabledRulesSet[r] = true
 	}
-	c.sensitiveKeywordsSet = make(map[string]bool, len(c.SensitiveKeywords))
-	for _, k := range c.SensitiveKeywords {
-		c.sensitiveKeywordsSet[k] = true
-	}
+
+	// sensitive keywords: normalize + expand
+	c.sensitiveKeywordsSet = buildSensitiveKeywordsSet(c.SensitiveKeywords)
 }
 
 // IsRuleDisabled returns true if the given rule name is disabled.
 func (c *Config) IsRuleDisabled(rule string) bool {
+	rule = strings.ToLower(strings.TrimSpace(rule))
 	return c.disabledRulesSet[rule]
 }
 
@@ -55,6 +102,7 @@ func LoadConfig(path string) (*Config, error) {
 		}
 		return nil, err
 	}
+
 	c := DefaultConfig()
 	if err := yaml.Unmarshal(data, c); err != nil {
 		return nil, err
