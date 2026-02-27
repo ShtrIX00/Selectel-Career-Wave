@@ -3,7 +3,7 @@ package analyzer_test
 import (
 	"testing"
 
-	"github.com/retro/vas/pkg/analyzer"
+	"github.com/ShtrlX00/Selectel-Career-Wave/pkg/analyzer"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/retro/vas/pkg/analyzer"
+	"github.com/ShtrlX00/Selectel-Career-Wave/pkg/analyzer"
 	"golang.org/x/tools/go/analysis"
 )
 

@@ -65,7 +65,7 @@ func checkSpecialChars(msg string, allowedSpecial string) *Finding {
 	if strings.Contains(msg, "...") {
 		return &Finding{
 			Rule:    "no-special-chars",
-			Message: "log message contains ellipsis "..."",
+			Message: "log message contains ellipsis \"...\"",
 		}
 	}
 

@@ -1,7 +1,7 @@
 version: "2"
 
 plugins:
-  - module: "github.com/retro/vas"
+  - module: "github.com/ShtrlX00/Selectel-Career-Wave"
     path: "./plugin/plugin.go"
 
 linters:
