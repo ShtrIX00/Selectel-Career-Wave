@@ -1,0 +1,9 @@
+version: "2"
+
+plugins:
+  - module: "github.com/retro/vas"
+    path: "./plugin/plugin.go"
+
+linters:
+  enable:
+    - logcheck
